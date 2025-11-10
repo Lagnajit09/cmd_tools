@@ -1,5 +1,22 @@
 const inquirer = require("inquirer");
 
+async function askTargetPath() {
+  const { targetPath } = await inquirer.prompt([
+    {
+      type: "input",
+      name: "targetPath",
+      message: "Where do you want to create the server?",
+      default: ".",
+      validate: (input) => {
+        // Allow ., .., relative paths, and absolute paths
+        if (input.trim() === "") return "Path cannot be empty";
+        return true;
+      },
+    },
+  ]);
+  return targetPath;
+}
+
 async function askServerName() {
   const { serverName } = await inquirer.prompt([
     {
@@ -67,11 +84,93 @@ async function askDjangoAppName() {
   ]);
   return djangoApp;
 }
+async function askGitInit() {
+  const { initGit } = await inquirer.prompt([
+    {
+      type: "confirm",
+      name: "initGit",
+      message: "Initialize Git repository?",
+      default: false,
+    },
+  ]);
+  return initGit;
+}
+
+async function askGitRemote(initGit) {
+  if (!initGit) return null;
+
+  const { addRemote } = await inquirer.prompt([
+    {
+      type: "confirm",
+      name: "addRemote",
+      message: "Add remote origin URL?",
+      default: false,
+    },
+  ]);
+
+  if (!addRemote) return null;
+
+  const { remoteUrl } = await inquirer.prompt([
+    {
+      type: "input",
+      name: "remoteUrl",
+      message: "Enter remote origin URL:",
+      validate: (input) => {
+        if (!input) return "Remote URL cannot be empty";
+        if (
+          !input.includes("github.com") &&
+          !input.includes("gitlab.com") &&
+          !input.includes("bitbucket.org") &&
+          !input.startsWith("git@") &&
+          !input.startsWith("https://")
+        ) {
+          return "Please enter a valid Git remote URL";
+        }
+        return true;
+      },
+    },
+  ]);
+
+  return remoteUrl;
+}
+
+async function askPackageManager(framework) {
+  // Only ask for Node.js projects (Express)
+  if (framework !== "Express") return "npm";
+
+  const { packageManager } = await inquirer.prompt([
+    {
+      type: "list",
+      name: "packageManager",
+      message: "Which package manager do you want to use?",
+      choices: ["npm", "yarn", "pnpm", "bun"],
+      default: "npm",
+    },
+  ]);
+  return packageManager;
+}
+
+async function askEnvFile() {
+  const { generateEnv } = await inquirer.prompt([
+    {
+      type: "confirm",
+      name: "generateEnv",
+      message: "Generate .env file?",
+      default: true,
+    },
+  ]);
+  return generateEnv;
+}
 
 module.exports = {
+  askTargetPath,
   askServerName,
   askFramework,
   askTypeScript,
   askDatabase,
   askDjangoAppName,
+  askGitInit,
+  askGitRemote,
+  askPackageManager,
+  askEnvFile,
 };

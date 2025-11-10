@@ -3,7 +3,17 @@ const path = require("path");
 const { execSync } = require("child_process");
 const chalk = require("chalk");
 
-async function generateDjango(targetPath, serverName, appName, database) {
+async function generateDjango(targetPath, config) {
+  const {
+    serverName,
+    djangoAppName,
+    database,
+    generateEnv,
+    gitExists,
+    initGit,
+  } = config;
+  const appName = djangoAppName;
+
   console.log(chalk.yellow("Setting up Django project..."));
 
   // Create requirements.txt
@@ -19,18 +29,119 @@ async function generateDjango(targetPath, serverName, appName, database) {
 
   fs.writeFileSync(path.join(targetPath, "requirements.txt"), requirements);
 
-  // Create .gitignore
-  fs.writeFileSync(
-    path.join(targetPath, ".gitignore"),
-    "*.pyc\n__pycache__/\ndb.sqlite3\n.env\nvenv/\n*.log\n.DS_Store\n"
-  );
+  // Create .gitignore (only if Git is initialized)
+  if (initGit || gitExists) {
+    // Create comprehensive .gitignore for Django
+    const gitignoreContent = `# Python
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+  
+# Django
+*.log
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+  
+# Environment
+.env
+.env.local
+venv/
+env/
+ENV/
+  
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+  
+# OS
+.DS_Store
+Thumbs.db
+  
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+  `;
+    fs.writeFileSync(path.join(targetPath, ".gitignore"), gitignoreContent);
+  }
 
-  // Create .env file
-  const envContent = `DEBUG=True
+  // Create .env file if requested
+  if (generateEnv) {
+    let envContent = `# Django Configuration
+DEBUG=True
+SECRET_KEY=django-insecure-${generateSecretKey()}
+
+# Server Configuration
+ALLOWED_HOSTS=localhost,127.0.0.1
+
+# CORS Configuration
+CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+`;
+
+    if (database === "PostgreSQL") {
+      envContent += `
+# PostgreSQL Database Configuration
+DB_ENGINE=django.db.backends.postgresql
+DB_NAME=${serverName}_db
+DB_USER=postgres
+DB_PASSWORD=yourpassword
+DB_HOST=localhost
+DB_PORT=5432
+DATABASE_URL=postgresql://postgres:yourpassword@localhost:5432/${serverName}_db
+`;
+    } else if (database === "MySQL") {
+      envContent += `
+# MySQL Database Configuration
+DB_ENGINE=django.db.backends.mysql
+DB_NAME=${serverName}_db
+DB_USER=root
+DB_PASSWORD=yourpassword
+DB_HOST=localhost
+DB_PORT=3306
+DATABASE_URL=mysql://root:yourpassword@localhost:3306/${serverName}_db
+`;
+    } else {
+      envContent += `
+# SQLite Database Configuration
+DATABASE_URL=sqlite:///db.sqlite3
+`;
+    }
+
+    envContent += `
+# Email Configuration (optional)
+EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=your-email@gmail.com
+EMAIL_HOST_PASSWORD=your-app-password
+`;
+
+    fs.writeFileSync(path.join(targetPath, ".env"), envContent);
+    fs.writeFileSync(
+      path.join(targetPath, ".env.example"),
+      envContent.replace(/=.+/g, "=")
+    );
+  } else {
+    // Create minimal .env even if not requested (needed for Django to run)
+    const envContent = `DEBUG=True
 SECRET_KEY=django-insecure-${generateSecretKey()}
 DATABASE_URL=sqlite:///db.sqlite3
 `;
-  fs.writeFileSync(path.join(targetPath, ".env"), envContent);
+    fs.writeFileSync(path.join(targetPath, ".env"), envContent);
+  }
 
   try {
     // Check if Python is installed

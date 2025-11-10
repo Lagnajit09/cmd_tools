@@ -1,12 +1,17 @@
 const fs = require("fs-extra");
 const path = require("path");
 
-async function generateExpress(
-  targetPath,
-  serverName,
-  useTypeScript,
-  database
-) {
+async function generateExpress(targetPath, config) {
+  const {
+    serverName,
+    useTypeScript,
+    database,
+    packageManager,
+    generateEnv,
+    gitExists,
+    initGit,
+  } = config;
+
   // Create package.json
   const packageJson = {
     name: serverName,
@@ -18,6 +23,7 @@ async function generateExpress(
       dev: useTypeScript
         ? "ts-node-dev --respawn src/index.ts"
         : "nodemon src/index.js",
+      build: useTypeScript ? "tsc" : undefined,
     },
     keywords: [],
     author: "",
@@ -29,6 +35,11 @@ async function generateExpress(
     },
     devDependencies: {},
   };
+
+  // Remove undefined scripts
+  packageJson.scripts = Object.fromEntries(
+    Object.entries(packageJson.scripts).filter(([_, v]) => v !== undefined)
+  );
 
   if (useTypeScript) {
     packageJson.dependencies["@types/express"] = "^4.17.17";
@@ -81,8 +92,12 @@ app.get('/', (req: Request, res: Response) => {
   res.json({ message: 'Welcome to ${serverName}!' });
 });
 
+app.get('/health', (req: Request, res: Response) => {
+  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+
 app.listen(PORT, () => {
-  console.log(\`Server is running on port \${PORT}\`);
+  console.log(\`🚀 Server is running on port \${PORT}\`);
 });
 `
     : `const express = require('express');
@@ -99,21 +114,147 @@ app.get('/', (req, res) => {
   res.json({ message: 'Welcome to ${serverName}!' });
 });
 
+app.get('/health', (req, res) => {
+  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+
 app.listen(PORT, () => {
-  console.log(\`Server is running on port \${PORT}\`);
+  console.log(\`🚀 Server is running on port \${PORT}\`);
 });
 `;
 
   fs.writeFileSync(path.join(srcPath, `index.${extension}`), indexContent);
 
-  // Create .env file
-  fs.writeFileSync(path.join(targetPath, ".env"), "PORT=3000\n");
+  // Create .env file if requested
+  if (generateEnv) {
+    let envContent = `# Server Configuration
+PORT=3000
+NODE_ENV=development
 
-  // Create .gitignore
-  fs.writeFileSync(
-    path.join(targetPath, ".gitignore"),
-    "node_modules\n.env\ndist\n"
-  );
+# CORS Configuration
+CORS_ORIGIN=http://localhost:3000
+`;
+
+    if (database === "Prisma") {
+      envContent += `
+# Database Configuration (Prisma)
+DATABASE_URL="postgresql://user:password@localhost:5432/mydb?schema=public"
+`;
+    } else if (database === "MongoDB") {
+      envContent += `
+# Database Configuration (MongoDB)
+MONGODB_URI=mongodb://localhost:27017/${serverName}
+DB_NAME=${serverName}
+`;
+    } else if (database === "PostgreSQL") {
+      envContent += `
+# Database Configuration (PostgreSQL)
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=${serverName}
+DB_USER=postgres
+DB_PASSWORD=yourpassword
+DATABASE_URL=postgresql://postgres:yourpassword@localhost:5432/${serverName}
+`;
+    } else if (database === "MySQL") {
+      envContent += `
+# Database Configuration (MySQL)
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=${serverName}
+DB_USER=root
+DB_PASSWORD=yourpassword
+DATABASE_URL=mysql://root:yourpassword@localhost:3306/${serverName}
+`;
+    }
+
+    envContent += `
+# JWT Configuration (if needed)
+JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+JWT_EXPIRES_IN=7d
+
+# API Configuration
+API_VERSION=v1
+`;
+
+    fs.writeFileSync(path.join(targetPath, ".env"), envContent);
+    fs.writeFileSync(
+      path.join(targetPath, ".env.example"),
+      envContent.replace(/=.+/g, "=")
+    );
+  }
+
+  // Create .gitignore with comprehensive exclusions (only if Git is initialized)
+  if (initGit || gitExists) {
+    const gitignoreContent = `# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+coverage/
+*.lcov
+.nyc_output
+
+# Logs
+logs/
+*.log
+
+# OS
+Thumbs.db
+
+# Misc
+.cache/
+temp/
+tmp/
+`;
+
+    // Add package manager specific files
+    if (packageManager === "yarn") {
+      fs.writeFileSync(
+        path.join(targetPath, ".gitignore"),
+        gitignoreContent + "\n# Yarn\nyarn.lock\n.yarn/\n.pnp.*\n"
+      );
+    } else if (packageManager === "pnpm") {
+      fs.writeFileSync(
+        path.join(targetPath, ".gitignore"),
+        gitignoreContent + "\n# pnpm\npnpm-lock.yaml\n.pnpm-debug.log\n"
+      );
+    } else if (packageManager === "bun") {
+      fs.writeFileSync(
+        path.join(targetPath, ".gitignore"),
+        gitignoreContent + "\n# Bun\nbun.lockb\n"
+      );
+    } else {
+      fs.writeFileSync(
+        path.join(targetPath, ".gitignore"),
+        gitignoreContent + "\n# npm\npackage-lock.json\n"
+      );
+    }
+  }
 
   // Create TypeScript config if needed
   if (useTypeScript) {
@@ -128,9 +269,11 @@ app.listen(PORT, () => {
         esModuleInterop: true,
         skipLibCheck: true,
         forceConsistentCasingInFileNames: true,
+        resolveJsonModule: true,
+        moduleResolution: "node",
       },
       include: ["src/**/*"],
-      exclude: ["node_modules"],
+      exclude: ["node_modules", "dist"],
     };
     fs.writeJsonSync(path.join(targetPath, "tsconfig.json"), tsConfig, {
       spaces: 2,
@@ -141,50 +284,191 @@ app.listen(PORT, () => {
   if (database === "Prisma") {
     const prismaPath = path.join(targetPath, "prisma");
     fs.mkdirSync(prismaPath);
-    const schema = `datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
+    const schema = `// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
   provider = "prisma-client-js"
 }
 
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
 model User {
-  id    Int     @id @default(autoincrement())
-  email String  @unique
-  name  String?
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 `;
     fs.writeFileSync(path.join(prismaPath, "schema.prisma"), schema);
   }
 
   // Create README
+  const installCmd = getInstallCommand(packageManager);
+  const devCmd = getDevCommand(packageManager);
+
   const readme = `# ${serverName}
+
+Express.js ${useTypeScript ? "TypeScript" : "JavaScript"} Server
+
+## Features
+
+- ✅ Express.js server
+- ✅ CORS enabled
+- ✅ Environment variables support
+${useTypeScript ? "- ✅ TypeScript configured" : ""}
+${database ? `- ✅ ${database} integration` : ""}
+- ✅ Health check endpoint
 
 ## Getting Started
 
-1. Install dependencies:
-   \`\`\`bash
-   npm install
-   \`\`\`
+### Installation
 
-2. Run the development server:
-   \`\`\`bash
-   npm run dev
-   \`\`\`
+\`\`\`bash
+${installCmd}
+\`\`\`
+
+### Environment Variables
+
+${
+  generateEnv
+    ? "Copy `.env.example` to `.env` and update the values:"
+    : "Create a `.env` file in the root directory:"
+}
+
+\`\`\`env
+PORT=3000
+NODE_ENV=development
+${database ? "DATABASE_URL=your_database_url" : ""}
+\`\`\`
 
 ${
   database === "Prisma"
-    ? `3. Set up Prisma:
-   \`\`\`bash
-   npm run prisma:generate
-   npm run prisma:migrate
-   \`\`\``
+    ? `### Prisma Setup
+
+\`\`\`bash
+${packageManager === "npm" ? "npm run" : packageManager} prisma:generate
+${packageManager === "npm" ? "npm run" : packageManager} prisma:migrate
+\`\`\`
+`
     : ""
 }
+
+### Running the Server
+
+Development mode:
+\`\`\`bash
+${devCmd}
+\`\`\`
+
+Production mode:
+\`\`\`bash
+${packageManager === "npm" ? "npm start" : `${packageManager} start`}
+\`\`\`
+
+The server will start on http://localhost:3000
+
+## API Endpoints
+
+- \`GET /\` - Welcome message
+- \`GET /health\` - Health check
+
+## Project Structure
+
+\`\`\`
+${serverName}/
+├── src/
+│   └── index.${useTypeScript ? "ts" : "js"}    # Main application file
+${
+  useTypeScript
+    ? "├── dist/              # Compiled JavaScript (generated)\n"
+    : ""
+}${
+    database === "Prisma"
+      ? "├── prisma/\n│   └── schema.prisma # Prisma schema\n"
+      : ""
+  }├── .env              # Environment variables
+├── .gitignore        # Git ignore rules
+├── package.json      # Dependencies and scripts
+${
+  useTypeScript ? "├── tsconfig.json     # TypeScript configuration\n" : ""
+}└── README.md         # This file
+\`\`\`
+
+## Package Manager
+
+This project uses **${packageManager}**. 
+
+${
+  packageManager !== "npm"
+    ? `Make sure you have ${packageManager} installed:
+\`\`\`bash
+${packageManager === "yarn" ? "npm install -g yarn" : ""}${
+        packageManager === "pnpm" ? "npm install -g pnpm" : ""
+      }${
+        packageManager === "bun"
+          ? "curl -fsSL https://bun.sh/install | bash"
+          : ""
+      }
+\`\`\`
+`
+    : ""
+}
+
+## Scripts
+
+- \`${devCmd}\` - Start development server with hot reload
+- \`${
+    packageManager === "npm" ? "npm start" : `${packageManager} start`
+  }\` - Start production server
+${
+  useTypeScript
+    ? `- \`${
+        packageManager === "npm" ? "npm run" : packageManager
+      } build\` - Compile TypeScript to JavaScript\n`
+    : ""
+}${
+    database === "Prisma"
+      ? `- \`${
+          packageManager === "npm" ? "npm run" : packageManager
+        } prisma:generate\` - Generate Prisma client
+- \`${
+          packageManager === "npm" ? "npm run" : packageManager
+        } prisma:migrate\` - Run database migrations
+`
+      : ""
+  }
+
+## License
+
+MIT
 `;
+
   fs.writeFileSync(path.join(targetPath, "README.md"), readme);
+}
+
+function getInstallCommand(packageManager) {
+  const commands = {
+    npm: "npm install",
+    yarn: "yarn install",
+    pnpm: "pnpm install",
+    bun: "bun install",
+  };
+  return commands[packageManager] || "npm install";
+}
+
+function getDevCommand(packageManager) {
+  const commands = {
+    npm: "npm run dev",
+    yarn: "yarn dev",
+    pnpm: "pnpm dev",
+    bun: "bun dev",
+  };
+  return commands[packageManager] || "npm run dev";
 }
 
 module.exports = { generateExpress };
