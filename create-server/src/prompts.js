@@ -22,7 +22,7 @@ async function askFramework() {
       type: "list",
       name: "framework",
       message: "Which framework do you want to use?",
-      choices: ["Express"],
+      choices: ["Express", "Django"],
     },
   ]);
   return framework;
@@ -52,9 +52,26 @@ async function askDatabase() {
   return database === "None (Skip)" ? null : database;
 }
 
+async function askDjangoAppName() {
+  const { djangoApp } = await inquirer.prompt([
+    {
+      type: "input",
+      name: "djangoApp",
+      message: "What is your first app name?",
+      default: "api",
+      validate: (input) => {
+        if (/^[a-z0-9-_]+$/.test(input)) return true;
+        return "App name may only include lowercase letters, numbers, hyphens, and underscores";
+      },
+    },
+  ]);
+  return djangoApp;
+}
+
 module.exports = {
   askServerName,
   askFramework,
   askTypeScript,
   askDatabase,
+  askDjangoAppName,
 };

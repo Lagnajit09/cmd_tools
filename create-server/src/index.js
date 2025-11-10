@@ -6,8 +6,10 @@ const {
   askFramework,
   askTypeScript,
   askDatabase,
+  askDjangoAppName,
 } = require("./prompts");
 const { generateExpress } = require("./generators/express");
+const { generateDjango } = require("./generators/django");
 
 async function createServer(serverName) {
   console.log(chalk.blue.bold("\n🚀 Welcome to Create-Server Command-Tool!\n"));
@@ -23,6 +25,11 @@ async function createServer(serverName) {
   let useTypeScript = false;
   if (framework === "Express") {
     useTypeScript = await askTypeScript();
+  }
+
+  let djangoAppName = "";
+  if (framework === "Django") {
+    djangoAppName = await askDjangoAppName();
   }
 
   // Ask about database
@@ -44,6 +51,8 @@ async function createServer(serverName) {
   // Generate project based on choices
   if (framework === "Express") {
     await generateExpress(targetPath, serverName, useTypeScript, database);
+  } else if (framework === "Django") {
+    await generateDjango(targetPath, serverName, djangoAppName, database);
   }
 
   console.log(chalk.green.bold("\n✅ Server created successfully!\n"));
