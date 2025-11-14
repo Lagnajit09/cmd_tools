@@ -1,20 +1,22 @@
 # 🚀 create-http-server
 
-A powerful interactive CLI tool to **bootstrap fully configured HTTP servers** in seconds — powered by **Node.js** and supporting both **Express** and **Django** frameworks.
+A powerful interactive CLI tool to **bootstrap modern HTTP servers** in seconds — supporting:
 
-Create servers, configure databases, initialize Git, and set up environments — all from your terminal.
+- **Express (JavaScript / TypeScript)**
+- **NestJS (TypeScript)**
+- **Django (Python)**
+
+Create servers, configure databases, set up environments, initialize Git, and auto-generate boilerplates — all from your terminal.
 
 ---
 
 ## 📦 Installation
 
-Install globally via npm:
-
 ```bash
 npm install -g create-http-server
 ```
 
-Or use it directly via `npx` (no installation required):
+Or run directly with npx:
 
 ```bash
 npx create-http-server
@@ -28,228 +30,231 @@ npx create-http-server
 create-http-server [server-name] [target-path]
 ```
 
-| Argument      | Description                              | Default             |
-| ------------- | ---------------------------------------- | ------------------- |
-| `server-name` | Name of your new server project          | Prompted if missing |
-| `target-path` | Path where the project should be created | Current directory   |
+| Argument      | Description               | Default           |
+| ------------- | ------------------------- | ----------------- |
+| `server-name` | Name of your project      | Prompted          |
+| `target-path` | Parent folder for project | Current directory |
 
-### Example Commands
+### Examples
 
 ```bash
-# Create in current directory
 create-http-server my-api
-
-# Create explicitly in current directory
-create-http-server my-api .
-
-# Create inside a subfolder
 create-http-server my-api ./projects
-
-# Create at an absolute path
-create-http-server my-api /path/to/backend
+create-http-server my-api /absolute/path
+create-http-server
 ```
 
+Running without arguments triggers full interactive setup.
+
 ---
 
-## 🧠 Interactive Setup
+## 🧠 Interactive Setup Options
 
-When you run the command without arguments, it will guide you through prompts such as:
+When the CLI starts, it asks for:
 
 - Server name
-- Framework choice (`Express` or `Django`)
-- Language preference (`JavaScript` or `TypeScript` for Express)
-- Database selection (`SQLite`, `PostgreSQL`, `MySQL`, `MongoDB`)
-- Package manager (`npm`, `yarn`, `pnpm`, or `bun`)
-- Environment file creation
-- Git initialization (with optional remote setup)
+- Framework: **Express**, **NestJS**, or **Django**
+- For Express: TypeScript or JavaScript
+- Database selection:
+
+  - SQLite
+  - PostgreSQL
+  - MySQL
+  - MongoDB
+  - Prisma (NestJS only)
+
+- Package manager:
+
+  - npm, yarn, pnpm, bun
+
+- Create `.env` file?
+- Initialize Git?
+- Add Git remote?
 
 ---
 
-## 🏗️ Generated Project Types
+## 🏗️ Framework Support
 
-### 🟢 **Express (Node.js)**
+---
 
-If you choose **Express**, the tool:
+# 🟩 1. Express (JavaScript / TypeScript)
 
-- Creates a complete Express boilerplate
-- Supports both **JavaScript** and **TypeScript**
-- Adds database setup files
-- Generates `.env` and `.gitignore`
-- Installs dependencies automatically
-- Configures a package manager of your choice
-- Initializes Git (if selected)
+### Features:
 
-**Next steps (example):**
+- JS or TS support
+- Basic routing setup
+- Environment variable setup
+- Database selection
+- Optional Git initialization
+- Auto-generated README
+
+### Next Steps (example):
 
 ```bash
-cd my-api
+cd my-express-api
 npm install
 npm run dev
 ```
 
+**Databases Supported:**
+
+- SQLite
+- PostgreSQL
+- MongoDB
+- MySQL
+
 ---
 
-### 🔵 **Django (Python)**
+# 🟦 2. NestJS (TypeScript)
 
-If you choose **Django**, the tool:
+Your CLI now supports full **NestJS project generation** using the official Nest CLI — with additional enhancements:
 
-- Creates a Python virtual environment (`venv`)
-- Installs Django and dependencies
-- Generates a REST-ready project with:
+### Features:
 
-  - CORS configuration
-  - Environment variable integration
-  - Auto-generated `.env` and `.env.example`
-  - Custom app (you name it)
+- TypeScript enabled by default
+- Pre-configured:
 
-- Initializes Git and `.gitignore`
-- Runs initial migrations
+  - CORS
+  - Validation pipes
+  - Environment variables
 
-**Next steps (example):**
+- Database support:
+
+  - Prisma
+  - MongoDB (Mongoose)
+  - PostgreSQL / MySQL (TypeORM)
+
+- Auto-generated:
+
+  - `app.module.ts` with database integration
+  - Health check endpoint
+  - Updated README
+  - `.env` + `.env.example`
+  - Optional Git setup
+
+### Next steps after generation:
 
 ```bash
-cd my-django-api
-source venv/bin/activate   # or venv\Scripts\activate on Windows
+cd my-nest-api
+npm install
+npm run start:dev
+```
+
+### Prisma-supported workflows:
+
+```bash
+npm run prisma:generate
+npm run prisma:migrate
+npm run prisma:studio
+```
+
+---
+
+# 🟧 3. Django (Python)
+
+### Features:
+
+- Creation of Python virtual environment
+- Installation of Django & database drivers
+- Auto-generated:
+
+  - settings.py with env support
+  - API app with routes
+  - CORS configuration
+  - `.env` and `.env.example`
+  - `.gitignore`
+  - README.md
+
+- Runs initial migrations
+- Optional Git initialization
+
+### Next steps:
+
+```bash
+cd my-django-app
+source venv/bin/activate   # Windows: venv\Scripts\activate
 python manage.py runserver
 ```
 
 ---
 
-## 💾 Databases Supported
+## 🧬 Database Support Matrix
 
-| Framework | Supported Databases                             |
-| --------- | ----------------------------------------------- |
-| Express   | SQLite, PostgreSQL, MySQL, MongoDB              |
-| Django    | SQLite, PostgreSQL, MySQL, MongoDB (via Djongo) |
-
-Each setup automatically configures the environment and `.env` variables.
-
----
-
-## 🧰 Features
-
-✅ Interactive CLI prompts  
- ✅ Express or Django project generator  
- ✅ TypeScript support (for Express)  
- ✅ Virtual environment setup (for Django)  
- ✅ Auto-generated `.env` and `.gitignore`  
- ✅ Database configuration  
- ✅ Git initialization (with remote option)  
- ✅ Cross-platform compatibility (Windows, macOS, Linux)
+| Framework | SQLite | PostgreSQL | MySQL | MongoDB    | Prisma |
+| --------- | ------ | ---------- | ----- | ---------- | ------ |
+| Express   | ✅     | ✅         | ✅    | ✅         | ✅     |
+| NestJS    | ❌     | ✅         | ✅    | ✅         | ✅     |
+| Django    | ✅     | ✅         | ✅    | Via Djongo | ❌     |
 
 ---
 
-## 📄 Example Workflow
+## 📂 Example Project Structures
 
-```bash
-$ create-http-server
-🚀 Welcome to Create Server!
-
-? Enter your server name: my-server
-? Choose a framework: Express
-? Use TypeScript? Yes
-? Choose a database: PostgreSQL
-? Do you want to create a .env file? Yes
-? Initialize a Git repository? Yes
-? Add a remote Git origin? No
-
-📦 Creating your server...
-✅ Server created successfully!
-
-Next steps:
-  cd my-server
-  npm install
-  npm run dev
-```
-
----
-
-## 🧪 Project Structure (Example)
-
-### Express (TypeScript)
+### Express
 
 ```
 my-api/
-├── src/
-│   ├── index.ts
-│   ├── routes/
-│   └── config/
-├── package.json
-├── tsconfig.json
-├── .env
-├── .gitignore
-└── README.md
+ ├── src/
+ ├── package.json
+ ├── .env
+ ├── .gitignore
+ └── README.md
+```
+
+### NestJS
+
+```
+my-nest-api/
+ ├── src/
+ ├── prisma/ (if Prisma)
+ ├── .env
+ ├── tsconfig.json
+ ├── nest-cli.json
+ └── README.md
 ```
 
 ### Django
 
 ```
 my-django-api/
-├── my_django_api/
-│   ├── settings.py
-│   ├── urls.py
-│   └── wsgi.py
-├── api/
-│   ├── views.py
-│   ├── urls.py
-│   └── models.py
-├── venv/
-├── .env
-├── requirements.txt
-└── README.md
+ ├── my_django_api/
+ ├── api/
+ ├── venv/
+ ├── requirements.txt
+ ├── .env
+ └── README.md
 ```
 
 ---
 
-## 🧑‍💻 CLI Help
+## 🧐 CLI Help
 
 ```bash
 create-http-server --help
 ```
 
-**Output:**
+---
 
-```
-Usage: create-http-server [server-name] [target-path]
+## 🧰 Features Summary
 
-Create a new server project
-
-Arguments:
-  server-name    Name of the server project
-  target-path    Path where to create the server (default: current directory)
-
-Examples:
-  $ create-http-server my-api
-  $ create-http-server my-api ./projects
-  $ create-http-server my-api /path/to/projects
-```
+- Interactive questionnaire
+- Three full frameworks supported
+- Auto environment setup
+- Database-aware templates
+- Git initialization
+- Cross-platform
+- Auto-generated README for each project
+- Python venv automation (Django)
+- NestJS CLI automation
 
 ---
 
-## 🐙 Git Integration
+## 🔧 Requirements
 
-- Automatically initializes a Git repository (if chosen)
-- Adds `.gitignore` suited for Express or Django
-- Optionally adds a remote origin
-
----
-
-## 🛠️ Requirements
-
-- Node.js ≥ 16.0
-- Python ≥ 3.8 (for Django projects)
+- Node.js ≥ 16
+- Python ≥ 3.8 (for Django)
 - npm / yarn / pnpm / bun
-- Git (optional but recommended)
-
----
-
-## 🌍 Cross-Platform Support
-
-Tested on:
-
-- 🪟 Windows 10/11
-- 🐧 Ubuntu / WSL
-- 🍎 macOS Ventura+
+- Git (optional)
 
 ---
 
@@ -282,4 +287,6 @@ Feel free to use, modify, and distribute.
 
 ---
 
-> ⚡ **create-http-server** — from zero to running backend in seconds.
+## 🌟 Summary
+
+`create-http-server` helps you generate a backend server in **Express**, **NestJS**, or **Django** with database support and full boilerplate — in seconds.

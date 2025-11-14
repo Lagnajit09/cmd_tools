@@ -39,7 +39,7 @@ async function askFramework() {
       type: "list",
       name: "framework",
       message: "Which framework do you want to use?",
-      choices: ["Express", "Django"],
+      choices: ["Express", "NestJS", "Django"],
     },
   ]);
   return framework;
@@ -135,15 +135,21 @@ async function askGitRemote(initGit) {
 }
 
 async function askPackageManager(framework) {
-  // Only ask for Node.js projects (Express)
-  if (framework !== "Express") return "npm";
+  // Only ask for Node.js projects (Express and NestJS)
+  if (framework !== "Express" && framework !== "NestJS") return "npm";
+
+  // NestJS CLI officially supports npm, yarn, and pnpm
+  const choices =
+    framework === "NestJS"
+      ? ["npm", "yarn", "pnpm"]
+      : ["npm", "yarn", "pnpm", "bun"];
 
   const { packageManager } = await inquirer.prompt([
     {
       type: "list",
       name: "packageManager",
       message: "Which package manager do you want to use?",
-      choices: ["npm", "yarn", "pnpm", "bun"],
+      choices,
       default: "npm",
     },
   ]);

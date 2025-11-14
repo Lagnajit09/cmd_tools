@@ -12,9 +12,11 @@ const {
   askPackageManager,
   askEnvFile,
   askTargetPath,
+  askDjangoAppName,
 } = require("./prompts");
 const { generateExpress } = require("./generators/express");
 const { generateDjango } = require("./generators/django");
+const { generateNestJS } = require("./generators/nestjs");
 
 async function createServer(serverName, targetPathArg) {
   console.log(chalk.blue.bold("\n🚀 Welcome to Create Server!\n"));
@@ -58,10 +60,13 @@ async function createServer(serverName, targetPathArg) {
   // Get framework choice
   const framework = await askFramework();
 
+  console.log("Selected Framework: " + framework);
+
   let useTypeScript = false;
   if (framework === "Express") {
     useTypeScript = await askTypeScript();
   }
+  // NestJS always uses TypeScript, so we don't ask
 
   let djangoAppName = "";
   if (framework === "Django") {
@@ -71,9 +76,9 @@ async function createServer(serverName, targetPathArg) {
   // Ask about database
   const database = await askDatabase();
 
-  // Ask about database (Only for Express)
+  // Ask about package manager (Only for Express and NestJS)
   let packageManager = "";
-  if (framework === "Express") {
+  if (framework === "Express" || framework === "NestJS") {
     packageManager = await askPackageManager(framework);
   }
 
@@ -114,6 +119,8 @@ async function createServer(serverName, targetPathArg) {
 
   if (framework === "Express") {
     await generateExpress(targetPath, config);
+  } else if (framework === "NestJS") {
+    await generateNestJS(targetPath, config);
   } else if (framework === "Django") {
     await generateDjango(targetPath, config);
   }
@@ -144,16 +151,16 @@ async function createServer(serverName, targetPathArg) {
   const relativePath = path.relative(process.cwd(), targetPath);
   if (relativePath !== serverName) {
     console.log(
-      chalk.cyan(`📍 Project created at: ${chalk.white(relativePath)}\n`)
+      chalk.cyan(`📁 Project created at: ${chalk.white(relativePath)}\n`)
     );
   }
 
   console.log(chalk.cyan("Next steps:"));
   console.log(chalk.white(`  cd ${relativePath || serverName}`));
 
-  if (framework === "Express") {
+  if (framework === "Express" || framework === "NestJS") {
     const installCmd = getInstallCommand(packageManager);
-    const devCmd = getDevCommand(packageManager);
+    const devCmd = getDevCommand(packageManager, framework);
 
     console.log(chalk.white(`  ${installCmd}`));
     console.log(chalk.white(`  ${devCmd}`));
@@ -210,14 +217,24 @@ function getInstallCommand(packageManager) {
   return commands[packageManager] || "npm install";
 }
 
-function getDevCommand(packageManager) {
-  const commands = {
-    npm: "npm run dev",
-    yarn: "yarn dev",
-    pnpm: "pnpm dev",
-    bun: "bun dev",
-  };
-  return commands[packageManager] || "npm run dev";
+function getDevCommand(packageManager, framework) {
+  if (framework === "NestJS") {
+    const commands = {
+      npm: "npm run start:dev",
+      yarn: "yarn start:dev",
+      pnpm: "pnpm start:dev",
+      bun: "bun start:dev",
+    };
+    return commands[packageManager] || "npm run start:dev";
+  } else {
+    const commands = {
+      npm: "npm run dev",
+      yarn: "yarn dev",
+      pnpm: "pnpm dev",
+      bun: "bun dev",
+    };
+    return commands[packageManager] || "npm run dev";
+  }
 }
 
 module.exports = { createServer };
