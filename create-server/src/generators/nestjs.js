@@ -8,11 +8,19 @@ async function generateNestJS(targetPath, config) {
     serverName,
     useTypeScript = true, // NestJS is TypeScript by default
     database,
+    orm,
     packageManager,
     generateEnv,
     gitExists,
     initGit,
   } = config;
+
+  console.log(
+    "DEBUG: NestJS Generator Config:",
+    JSON.stringify(config, null, 2)
+  );
+  console.log("DEBUG: ORM:", orm);
+  console.log("DEBUG: Database:", database);
 
   console.log(chalk.yellow("📦 Installing NestJS CLI globally..."));
 
@@ -155,23 +163,41 @@ lerna-debug.log*
   packageJson.dependencies["class-transformer"] = "^0.5.1";
 
   // Add database dependencies
-  if (database === "Prisma") {
-    packageJson.dependencies["@prisma/client"] = "^5.0.0";
-    packageJson.devDependencies["prisma"] = "^5.0.0";
+  // Add database dependencies
+  if (orm === "Prisma") {
+    packageJson.dependencies["@prisma/client"] = "latest";
+    packageJson.devDependencies["prisma"] = "latest";
+
+    if (database === "PostgreSQL") {
+      packageJson.dependencies["@prisma/adapter-pg"] = "latest";
+      packageJson.dependencies["pg"] = "latest";
+      packageJson.dependencies["@types/pg"] = "latest";
+    } else if (database === "MySQL") {
+      packageJson.dependencies["mysql2"] = "latest";
+    }
+
     packageJson.scripts["prisma:generate"] = "prisma generate";
     packageJson.scripts["prisma:migrate"] = "prisma migrate dev";
     packageJson.scripts["prisma:studio"] = "prisma studio";
+  } else if (orm === "TypeORM") {
+    packageJson.dependencies["@nestjs/typeorm"] = "latest";
+    packageJson.dependencies["typeorm"] = "latest";
+    if (database === "PostgreSQL") {
+      packageJson.dependencies["pg"] = "latest";
+    } else if (database === "MySQL") {
+      packageJson.dependencies["mysql2"] = "latest";
+    }
   } else if (database === "MongoDB") {
-    packageJson.dependencies["@nestjs/mongoose"] = "^10.0.0";
-    packageJson.dependencies["mongoose"] = "^7.0.0";
-  } else if (database === "PostgreSQL") {
-    packageJson.dependencies["@nestjs/typeorm"] = "^10.0.0";
-    packageJson.dependencies["typeorm"] = "^0.3.0";
-    packageJson.dependencies["pg"] = "^8.11.0";
-  } else if (database === "MySQL") {
-    packageJson.dependencies["@nestjs/typeorm"] = "^10.0.0";
-    packageJson.dependencies["typeorm"] = "^0.3.0";
-    packageJson.dependencies["mysql2"] = "^3.0.0";
+    if (orm === "Mongoose") {
+      packageJson.dependencies["@nestjs/mongoose"] = "latest";
+      packageJson.dependencies["mongoose"] = "latest";
+    } else if (orm === "Prisma") {
+      packageJson.dependencies["@prisma/client"] = "latest";
+      packageJson.devDependencies["prisma"] = "latest";
+      packageJson.scripts["prisma:generate"] = "prisma generate";
+    } else {
+      packageJson.dependencies["mongodb"] = "latest";
+    }
   }
 
   fs.writeJsonSync(packageJsonPath, packageJson, { spaces: 2 });
@@ -257,12 +283,12 @@ NODE_ENV=development
 CORS_ORIGIN=http://localhost:3000
 `;
 
-    if (database === "Prisma") {
+    if (orm === "Prisma") {
       envContent += `
 # Database Configuration (Prisma)
 DATABASE_URL="postgresql://user:password@localhost:5432/mydb?schema=public"
 `;
-    } else if (database === "MongoDB") {
+    } else if (orm === "Mongoose") {
       envContent += `
 # Database Configuration (MongoDB)
 MONGODB_URI=mongodb://localhost:27017/${serverName}
@@ -336,20 +362,43 @@ JWT_EXPIRES_IN=7d
     }
   }
 
-  // Create Prisma schema if needed
-  if (database === "Prisma") {
+  // Create Prisma schema and config if needed
+  if (orm === "Prisma") {
     const prismaPath = path.join(targetPath, "prisma");
     fs.mkdirSync(prismaPath, { recursive: true });
-    const schema = `// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-generator client {
+    // Create prisma.config.ts
+    const prismaConfigContent = `import { defineConfig } from '@prisma/config';
+
+export default defineConfig({
+  earlyAccess: true,
+  schema: {
+    kind: 'multi',
+    folder: 'prisma/schema',
+  },
+  datasource: {
+    provider: '${
+      database === "PostgreSQL"
+        ? "postgresql"
+        : database === "MySQL"
+        ? "mysql"
+        : "mongodb"
+    }',
+    url: process.env.DATABASE_URL,
+  },
+});
+`;
+    fs.writeFileSync(
+      path.join(targetPath, "prisma.config.ts"),
+      prismaConfigContent
+    );
+
+    const schemaFolderPath = path.join(prismaPath, "schema");
+    fs.mkdirSync(schemaFolderPath, { recursive: true });
+
+    const schema = `generator client {
   provider = "prisma-client-js"
-}
-
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  previewFeatures = ["driverAdapters"]
 }
 
 model User {
@@ -360,28 +409,54 @@ model User {
   updatedAt DateTime @updatedAt
 }
 `;
-    fs.writeFileSync(path.join(prismaPath, "schema.prisma"), schema);
+    fs.writeFileSync(path.join(schemaFolderPath, "schema.prisma"), schema);
 
     // Create Prisma module and service
     const prismaServicePath = path.join(targetPath, "src", "prisma");
     fs.mkdirSync(prismaServicePath, { recursive: true });
 
-    const prismaServiceContent = `import { Injectable, OnModuleInit } from '@nestjs/common';
+    let prismaServiceContent = "";
+    if (database === "PostgreSQL") {
+      prismaServiceContent = `import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
 
 @Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit {
+export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+  constructor() {
+    const connectionString = process.env.DATABASE_URL!;
+    const pool = new Pool({ connectionString });
+    const adapter = new PrismaPg(pool);
+    super({ adapter });
+  }
+
   async onModuleInit() {
     await this.$connect();
   }
 
-  async enableShutdownHooks(app: any) {
-    this.$on('beforeExit', async () => {
-      await app.close();
-    });
+  async onModuleDestroy() {
+    await this.$disconnect();
   }
 }
 `;
+    } else {
+      prismaServiceContent = `import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { PrismaClient } from '@prisma/client';
+
+@Injectable()
+export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+  async onModuleInit() {
+    await this.$connect();
+  }
+
+  async onModuleDestroy() {
+    await this.$disconnect();
+  }
+}
+`;
+    }
+
     fs.writeFileSync(
       path.join(prismaServicePath, "prisma.service.ts"),
       prismaServiceContent
@@ -422,7 +497,7 @@ import { PrismaModule } from './prisma/prisma.module';
 export class AppModule {}
 `;
     fs.writeFileSync(appModulePath, appModuleContent);
-  } else if (database === "MongoDB") {
+  } else if (orm === "Mongoose") {
     // Update app.module.ts for MongoDB
     const appModulePath = path.join(targetPath, "src", "app.module.ts");
     const appModuleContent = `import { Module } from '@nestjs/common';
@@ -444,7 +519,7 @@ import { AppService } from './app.service';
 export class AppModule {}
 `;
     fs.writeFileSync(appModulePath, appModuleContent);
-  } else if (database === "PostgreSQL" || database === "MySQL") {
+  } else if (orm === "TypeORM") {
     // Update app.module.ts for TypeORM
     const dbType = database === "PostgreSQL" ? "postgres" : "mysql";
     const appModulePath = path.join(targetPath, "src", "app.module.ts");
@@ -462,9 +537,9 @@ import { AppService } from './app.service';
     TypeOrmModule.forRoot({
       type: '${dbType}',
       host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT) || ${
+      port: parseInt(process.env.DB_PORT || '${
         database === "PostgreSQL" ? "5432" : "3306"
-      },
+      }'),
       username: process.env.DB_USER || '${
         database === "PostgreSQL" ? "postgres" : "root"
       }',
@@ -473,6 +548,59 @@ import { AppService } from './app.service';
       entities: [],
       synchronize: process.env.NODE_ENV !== 'production',
     }),
+  ],
+  controllers: [AppController],
+  providers: [AppService],
+})
+export class AppModule {}
+`;
+    fs.writeFileSync(appModulePath, appModuleContent);
+  } else if (database === "MongoDB" && !orm) {
+    // Native MongoDB Setup
+    const databasePath = path.join(targetPath, "src", "database");
+    fs.mkdirSync(databasePath, { recursive: true });
+
+    const databaseModuleContent = `import { Module, Global } from '@nestjs/common';
+import { MongoClient, Db } from 'mongodb';
+
+@Global()
+@Module({
+  providers: [
+    {
+      provide: 'DATABASE_CONNECTION',
+      useFactory: async (): Promise<Db> => {
+        try {
+          const client = await MongoClient.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017');
+          const dbName = process.env.DB_NAME || '${serverName}';
+          return client.db(dbName);
+        } catch (e) {
+          throw e;
+        }
+      },
+    },
+  ],
+  exports: ['DATABASE_CONNECTION'],
+})
+export class DatabaseModule {}
+`;
+    fs.writeFileSync(
+      path.join(databasePath, "database.module.ts"),
+      databaseModuleContent
+    );
+
+    const appModulePath = path.join(targetPath, "src", "app.module.ts");
+    const appModuleContent = `import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { DatabaseModule } from './database/database.module';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
+    DatabaseModule,
   ],
   controllers: [AppController],
   providers: [AppService],

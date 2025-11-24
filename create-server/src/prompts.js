@@ -57,16 +57,54 @@ async function askTypeScript() {
   return useTypeScript;
 }
 
-async function askDatabase() {
-  const { database } = await inquirer.prompt([
+async function askDatabaseType(framework) {
+  const choices = ["PostgreSQL", "MySQL", "MongoDB", "None (Skip)"];
+
+  // Django supports SQLite by default, so we can add it or just rely on None implying SQLite/default
+  // But for clarity let's keep it consistent. Django generator handles "None" as SQLite.
+
+  const { databaseType } = await inquirer.prompt([
     {
       type: "list",
-      name: "database",
-      message: "Which database/ORM do you want to use?",
-      choices: ["None (Skip)", "Prisma", "MongoDB", "PostgreSQL", "MySQL"],
+      name: "databaseType",
+      message: "Which database do you want to use?",
+      choices,
     },
   ]);
-  return database === "None (Skip)" ? null : database;
+  return databaseType === "None (Skip)" ? null : databaseType;
+}
+
+async function askOrm(framework, databaseType) {
+  if (!databaseType) return null;
+
+  let choices = [];
+
+  if (framework === "Express") {
+    if (databaseType === "MongoDB") {
+      choices = ["Mongoose", "Prisma", "None (Native Driver)"];
+    } else {
+      choices = ["Prisma", "None (Native Driver)"];
+    }
+  } else if (framework === "NestJS") {
+    if (databaseType === "MongoDB") {
+      choices = ["Mongoose", "Prisma", "None (Native Driver)"];
+    } else {
+      choices = ["Prisma", "TypeORM"];
+    }
+  } else {
+    return null; // Django uses its own ORM
+  }
+
+  const { orm } = await inquirer.prompt([
+    {
+      type: "list",
+      name: "orm",
+      message: "Which ORM do you want to use?",
+      choices,
+    },
+  ]);
+
+  return orm === "None (Native Driver)" ? null : orm;
 }
 
 async function askDjangoAppName() {
@@ -173,7 +211,8 @@ module.exports = {
   askServerName,
   askFramework,
   askTypeScript,
-  askDatabase,
+  askDatabaseType,
+  askOrm,
   askDjangoAppName,
   askGitInit,
   askGitRemote,

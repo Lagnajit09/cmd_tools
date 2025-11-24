@@ -6,6 +6,7 @@ async function generateExpress(targetPath, config) {
     serverName,
     useTypeScript,
     database,
+    orm,
     packageManager,
     generateEnv,
     gitExists,
@@ -52,17 +53,35 @@ async function generateExpress(targetPath, config) {
   }
 
   // Add database dependencies
-  if (database === "Prisma") {
-    packageJson.dependencies["@prisma/client"] = "^5.0.0";
-    packageJson.devDependencies["prisma"] = "^5.0.0";
+  if (orm === "Prisma") {
+    packageManager === "npm"
+      ? (packageJson.devDependencies["prisma"] = "latest")
+      : (packageJson.devDependencies["prisma"] = "latest");
+
+    packageJson.dependencies["@prisma/client"] = "latest";
+
+    if (database === "PostgreSQL") {
+      packageJson.dependencies["@prisma/adapter-pg"] = "latest";
+      packageJson.dependencies["pg"] = "latest";
+      packageJson.dependencies["@types/pg"] = "latest";
+    } else if (database === "MySQL") {
+      packageJson.dependencies["mysql2"] = "latest";
+    } else if (database === "MongoDB") {
+      // No specific adapter needed for Mongo usually
+    }
     packageJson.scripts["prisma:generate"] = "prisma generate";
     packageJson.scripts["prisma:migrate"] = "prisma migrate dev";
   } else if (database === "MongoDB") {
-    packageJson.dependencies["mongoose"] = "^7.0.0";
+    if (orm === "Mongoose") {
+      packageJson.dependencies["mongoose"] = "latest";
+    } else {
+      packageJson.dependencies["mongodb"] = "latest";
+      packageJson.dependencies["dotenv"] = "latest";
+    }
   } else if (database === "PostgreSQL") {
-    packageJson.dependencies["pg"] = "^8.11.0";
+    packageJson.dependencies["pg"] = "latest";
   } else if (database === "MySQL") {
-    packageJson.dependencies["mysql2"] = "^3.0.0";
+    packageJson.dependencies["mysql2"] = "latest";
   }
 
   fs.writeJsonSync(path.join(targetPath, "package.json"), packageJson, {
@@ -280,20 +299,47 @@ tmp/
     });
   }
 
-  // Create Prisma schema if needed
-  if (database === "Prisma") {
+  // Create Prisma schema and config if needed
+  if (orm === "Prisma") {
     const prismaPath = path.join(targetPath, "prisma");
     fs.mkdirSync(prismaPath);
-    const schema = `// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-generator client {
+    // Create prisma.config.ts
+    const prismaConfigContent = `import { defineConfig } from '@prisma/config';
+
+export default defineConfig({
+  earlyAccess: true,
+  schema: {
+    kind: 'multi',
+    folder: 'prisma/schema',
+  },
+  datasource: {
+    provider: '${
+      database === "PostgreSQL"
+        ? "postgresql"
+        : database === "MySQL"
+        ? "mysql"
+        : "mongodb"
+    }',
+    url: process.env.DATABASE_URL,
+  },
+});
+`;
+    fs.writeFileSync(
+      path.join(targetPath, "prisma.config.ts"),
+      prismaConfigContent
+    );
+
+    // Create schema.prisma (minimal, as config handles connection now mostly, but schema still needed for models)
+    // With Prisma 7 config, we might use multi-file schema, but let's stick to standard schema.prisma for simplicity unless 'multi' is enforced.
+    // The config above uses 'folder: "prisma/schema"', so we should create that folder.
+
+    const schemaFolderPath = path.join(prismaPath, "schema");
+    fs.mkdirSync(schemaFolderPath, { recursive: true });
+
+    const schema = `generator client {
   provider = "prisma-client-js"
-}
-
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  previewFeatures = ["driverAdapters"]
 }
 
 model User {
@@ -304,7 +350,76 @@ model User {
   updatedAt DateTime @updatedAt
 }
 `;
-    fs.writeFileSync(path.join(prismaPath, "schema.prisma"), schema);
+    fs.writeFileSync(path.join(schemaFolderPath, "schema.prisma"), schema);
+
+    // Create src/lib/db.ts
+    const libPath = path.join(targetPath, "src", "lib");
+    fs.mkdirSync(libPath, { recursive: true });
+
+    let dbTsContent = "";
+    if (database === "PostgreSQL") {
+      dbTsContent = `import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const connectionString = process.env.DATABASE_URL!;
+
+const pool = new Pool({ connectionString });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
+
+export default prisma;
+`;
+    } else {
+      // Fallback for others without adapter for now
+      dbTsContent = `import { PrismaClient } from '@prisma/client';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const prisma = new PrismaClient();
+
+export default prisma;
+`;
+    }
+    fs.writeFileSync(path.join(libPath, "db.ts"), dbTsContent);
+  } else if (database === "MongoDB" && orm !== "Mongoose") {
+    // Native MongoDB Driver Setup
+    const libPath = path.join(targetPath, "src", "lib");
+    fs.mkdirSync(libPath, { recursive: true });
+
+    const dbTsContent = `import { MongoClient, Db } from 'mongodb';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const url = process.env.MONGODB_URI || 'mongodb://localhost:27017';
+const dbName = process.env.DB_NAME || '${serverName}';
+
+const client = new MongoClient(url);
+
+let db: Db;
+
+export async function connectToDatabase() {
+  if (db) return db;
+  
+  try {
+    await client.connect();
+    console.log('Connected successfully to MongoDB');
+    db = client.db(dbName);
+    return db;
+  } catch (error) {
+    console.error('MongoDB connection error:', error);
+    process.exit(1);
+  }
+}
+
+export { client };
+`;
+    fs.writeFileSync(path.join(libPath, "db.ts"), dbTsContent);
   }
 
   // Create README

@@ -6,7 +6,8 @@ const {
   askServerName,
   askFramework,
   askTypeScript,
-  askDatabase,
+  askDatabaseType,
+  askOrm,
   askGitInit,
   askGitRemote,
   askPackageManager,
@@ -63,23 +64,40 @@ async function createServer(serverName, targetPathArg) {
   console.log("Selected Framework: " + framework);
 
   let useTypeScript = false;
+  let djangoAppName = "";
+  let database = null;
+  let orm = null;
+  let packageManager = "";
+
   if (framework === "Express") {
     useTypeScript = await askTypeScript();
-  }
-  // NestJS always uses TypeScript, so we don't ask
 
-  let djangoAppName = "";
-  if (framework === "Django") {
-    djangoAppName = await askDjangoAppName();
-  }
+    const databaseType = await askDatabaseType(framework);
+    if (databaseType) {
+      database = databaseType;
+      orm = await askOrm(framework, databaseType);
+    }
 
-  // Ask about database
-  const database = await askDatabase();
-
-  // Ask about package manager (Only for Express and NestJS)
-  let packageManager = "";
-  if (framework === "Express" || framework === "NestJS") {
     packageManager = await askPackageManager(framework);
+  } else if (framework === "NestJS") {
+    // NestJS always uses TypeScript
+    useTypeScript = true;
+
+    const databaseType = await askDatabaseType(framework);
+    if (databaseType) {
+      database = databaseType;
+      orm = await askOrm(framework, databaseType);
+    }
+
+    packageManager = await askPackageManager(framework);
+  } else if (framework === "Django") {
+    djangoAppName = await askDjangoAppName();
+
+    const databaseType = await askDatabaseType(framework);
+    if (databaseType) {
+      database = databaseType;
+      // Django uses its own ORM, so we don't ask for ORM
+    }
   }
 
   // Ask about environment file
@@ -109,6 +127,7 @@ async function createServer(serverName, targetPathArg) {
     serverName,
     useTypeScript,
     database,
+    orm,
     djangoAppName,
     packageManager,
     generateEnv,
